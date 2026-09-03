@@ -33,6 +33,8 @@ except Exception:
 FONT = None
 for _p in ("Vazirmatn-Regular.ttf", "Vazir.ttf"):
     if os.path.exists(_p):
+        # ثبت به‌عنوان فونت پیش‌فرض کل برنامه (Roboto) تا همه‌جا فارسی درست نمایش داده شود
+        LabelBase.register(name="Roboto", fn_regular=_p)
         LabelBase.register(name="fa", fn_regular=_p)
         FONT = "fa"
         break
@@ -137,6 +139,13 @@ class Downloader(App):
                          daemon=True).start()
 
     def _run(self, url, fmt, path):
+        # logger ساده تا yt-dlp سراغ کنسول (که در اندروید وجود ندارد) نرود
+        class _Logger:
+            def debug(self, m): pass
+            def info(self, m): pass
+            def warning(self, m): pass
+            def error(self, m): pass
+
         try:
             os.makedirs(path, exist_ok=True)
             opts = {
@@ -144,6 +153,10 @@ class Downloader(App):
                 "outtmpl": os.path.join(path, "%(title)s.%(ext)s"),
                 "noplaylist": True,
                 "progress_hooks": [self._hook],
+                "logger": _Logger(),
+                "quiet": True,
+                "no_warnings": True,
+                "noprogress": True,
             }
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=True)
