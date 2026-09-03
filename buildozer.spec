@@ -12,8 +12,9 @@ source.include_exts = py,ttf
 version = 1.0
 
 # کتابخانه‌های موردنیاز
-# python-bidi روی نسخه ۰.۴.۲ پین شده تا نیازی به کامپایلر Rust نداشته باشد
-requirements = python3,kivy,yt-dlp,arabic-reshaper,python-bidi==0.4.2,certifi
+# python-bidi روی ۰.۴.۲ پین شده تا نیازی به Rust نداشته باشد
+# charset-normalizer روی ۲.۱.۱ پین شده چون این نسخه خالص پایتون است و بخش C ندارد
+requirements = python3,kivy,yt-dlp,arabic-reshaper,python-bidi==0.4.2,charset-normalizer==2.1.1,certifi
 
 orientation = portrait
 fullscreen = 0
