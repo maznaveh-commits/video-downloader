@@ -12,7 +12,8 @@ source.include_exts = py,ttf
 version = 1.0
 
 # کتابخانه‌های موردنیاز
-requirements = python3,kivy,yt-dlp,arabic-reshaper,python-bidi,certifi
+# python-bidi روی نسخه ۰.۴.۲ پین شده تا نیازی به کامپایلر Rust نداشته باشد
+requirements = python3,kivy,yt-dlp,arabic-reshaper,python-bidi==0.4.2,certifi
 
 orientation = portrait
 fullscreen = 0
@@ -23,10 +24,6 @@ android.api = 34
 android.minapi = 24
 android.archs = arm64-v8a
 android.allow_backup = 1
-
-# اجازه دسترسی به حافظه در اندروید جدید (اختیاری)
-# اگر خواستید در پوشه عمومی Download ذخیره کنید، خط زیر را فعال کنید:
-# android.add_permissions = android.permission.MANAGE_EXTERNAL_STORAGE
 
 
 [buildozer]
