@@ -25,7 +25,7 @@ from kivy.graphics import Color, RoundedRectangle
 
 import yt_dlp
 
-# ---------- شماره نسخه برنامه ----------
+# ---------- شماره نسخه ----------
 VERSION = "1.0"
 
 # ---------- شکل‌دهی صحیح متن فارسی ----------
@@ -56,14 +56,13 @@ except Exception:
 
 
 def ensure_all_files_access():
-    """در اندروید ۱۱+ اجازه نوشتن در همه‌ی پوشه‌ها را می‌گیرد."""
     if not ANDROID:
         return
     try:
         from jnius import autoclass
         Environment = autoclass("android.os.Environment")
-        VERSION = autoclass("android.os.Build$VERSION")
-        if VERSION.SDK_INT >= 30 and not Environment.isExternalStorageManager():
+        VERSION_ = autoclass("android.os.Build$VERSION")
+        if VERSION_.SDK_INT >= 30 and not Environment.isExternalStorageManager():
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
             Intent = autoclass("android.content.Intent")
             Settings = autoclass("android.provider.Settings")
@@ -78,7 +77,6 @@ def ensure_all_files_access():
 
 
 def open_file(path):
-    """باز کردن فایل با پخش‌کننده‌ی پیش‌فرض گوشی."""
     if not (ANDROID and path and os.path.exists(path)):
         return False
     try:
@@ -110,7 +108,7 @@ class _Cancelled(Exception):
     pass
 
 
-# ---------- پالت رنگ (تیره / سبز نئونی) ----------
+# ---------- پالت رنگ ----------
 BG       = (0.043, 0.055, 0.051, 1)
 SURFACE  = (0.094, 0.114, 0.106, 1)
 ACCENT   = (0.0,   0.902, 0.463, 1)
@@ -123,8 +121,7 @@ TRACK    = (0.16,  0.19,  0.17,  1)
 INPUTBG  = (0.93,  0.95,  0.94,  1)
 INPUTTX  = (0.06,  0.08,  0.07,  1)
 
-# ---------- کیفیت‌ها ----------
-# هر گزینه چند حالت پشتیبان دارد تا اگر فرمت دقیق نبود، نزدیک‌ترین گزینه گرفته شود
+# ---------- کیفیت‌های آماده (با پشتیبان انعطاف‌پذیر) ----------
 QUALITY = {
     fa("بهترین (تک‌فایل)"): "best[ext=mp4]/best[vcodec!=none][acodec!=none]/best",
     fa("۷۲۰p"): "best[height<=720][ext=mp4]/best[height<=720]/best",
@@ -144,7 +141,6 @@ def default_dir():
 
 
 def cookie_file_for(url):
-    """اگر فایل کوکی مناسب در پوشه Download باشد، مسیرش را برمی‌گرداند."""
     d = default_dir()
     u = (url or "").lower()
     if "instagram.com" in u:
@@ -153,7 +149,7 @@ def cookie_file_for(url):
         names = ["youtube_cookies.txt", "cookies_youtube.txt"]
     else:
         names = []
-    names.append("cookies.txt")  # فایل عمومی به‌عنوان پشتیبان
+    names.append("cookies.txt")
     for n in names:
         p = os.path.join(d, n)
         if os.path.isfile(p):
@@ -201,6 +197,7 @@ class Downloader(App):
         self._downloading = False
         self._cancel = False
         self._last_file = None
+        self._fmt_popup = None
 
         if ANDROID:
             try:
@@ -212,9 +209,11 @@ class Downloader(App):
                 pass
             ensure_all_files_access()
 
-        root = BoxLayout(orientation="vertical",
-                         padding=[dp(20), dp(26), dp(20), dp(18)],
-                         spacing=dp(10))
+        # کل محتوا داخل ScrollView تا روی هر گوشی جا شود
+        scroll = ScrollView()
+        root = BoxLayout(orientation="vertical", size_hint_y=None,
+                         padding=[dp(20), dp(24), dp(20), dp(20)], spacing=dp(10))
+        root.bind(minimum_height=root.setter("height"))
 
         root.add_widget(Label(text=fa("دانلود ویدئو"),
                               size_hint_y=None, height=dp(42),
@@ -231,9 +230,9 @@ class Downloader(App):
         root.add_widget(Label(text="v" + VERSION, size_hint_y=None,
                               height=dp(18), font_size="11sp", color=MUTED))
 
-        root.add_widget(Widget(size_hint_y=None, height=dp(8)))
+        root.add_widget(Widget(size_hint_y=None, height=dp(6)))
 
-        # ---- لینک ویدئو + دکمه پاک ----
+        # ---- لینک + پاک ----
         root.add_widget(self._label(fa("لینک ویدئو")))
         url_row = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(8))
         self.url = self._input(hint=fa("لینک را اینجا بچسبانید"))
@@ -243,8 +242,18 @@ class Downloader(App):
         url_row.add_widget(clear_btn)
         root.add_widget(url_row)
 
-        # ---- کیفیت ----
-        root.add_widget(self._label(fa("کیفیت")))
+        # ---- دکمه دریافت فرمت‌ها ----
+        fmt_btn = Button(text=fa("دریافت فرمت‌های این لینک"),
+                         size_hint_y=None, height=dp(48),
+                         background_normal="", background_down="",
+                         background_color=(0, 0, 0, 0),
+                         color=ACCENT, bold=True, font_size="15sp")
+        round_bg(fmt_btn, SURFACE, 14)
+        fmt_btn.bind(on_release=self.fetch_formats)
+        root.add_widget(fmt_btn)
+
+        # ---- کیفیت آماده ----
+        root.add_widget(self._label(fa("یا کیفیت آماده")))
         self.quality = Spinner(
             text=list(QUALITY.keys())[0],
             values=list(QUALITY.keys()),
@@ -264,9 +273,9 @@ class Downloader(App):
         path_row.add_widget(browse_btn)
         root.add_widget(path_row)
 
-        root.add_widget(Widget(size_hint_y=None, height=dp(6)))
+        root.add_widget(Widget(size_hint_y=None, height=dp(4)))
 
-        # ---- دکمه دانلود / لغو ----
+        # ---- دکمه دانلود ----
         self.btn = Button(text=fa("دانلود"),
                           size_hint_y=None, height=dp(54),
                           background_normal="", background_down="",
@@ -287,7 +296,6 @@ class Downloader(App):
             self.status, "text_size", (self.status.width, self.status.height)))
         root.add_widget(self.status)
 
-        # ---- دکمه باز کردن فایل (بعد از تکمیل نمایان می‌شود) ----
         self.open_btn = Button(text=fa("باز کردن فایل"),
                                size_hint_y=None, height=dp(48),
                                background_normal="", background_down="",
@@ -298,7 +306,6 @@ class Downloader(App):
         self.open_btn.bind(on_release=lambda *_: self._open_last())
         root.add_widget(self.open_btn)
 
-        # ---- سابقه دانلودها ----
         hist_btn = Button(text=fa("سابقه دانلودها"),
                           size_hint_y=None, height=dp(46),
                           background_normal="", background_down="",
@@ -308,8 +315,8 @@ class Downloader(App):
         hist_btn.bind(on_release=self.open_history)
         root.add_widget(hist_btn)
 
-        root.add_widget(Widget())
-        return root
+        scroll.add_widget(root)
+        return scroll
 
     # ---------- سازنده‌های ویجت ----------
     def _label(self, text):
@@ -338,16 +345,136 @@ class Downloader(App):
     def _btn_state(self, btn, state):
         btn._bgc.rgba = ACCENT_D if state == "down" else ACCENT
 
+    # ---------- دریافت و نمایش فرمت‌ها ----------
+    def fetch_formats(self, *_):
+        url = self.url.text.strip()
+        if not url:
+            self.set_status(fa("لینک را وارد کنید"), RED)
+            return
+        if self._downloading:
+            return
+        self.set_status(fa("در حال دریافت فرمت‌ها..."), MUTED)
+        threading.Thread(target=self._fetch_run, args=(url,), daemon=True).start()
+
+    def _fetch_run(self, url):
+        class _L:
+            def debug(self, m): pass
+            def info(self, m): pass
+            def warning(self, m): pass
+            def error(self, m): pass
+
+        try:
+            opts = {"quiet": True, "no_warnings": True,
+                    "logger": _L(), "noplaylist": True}
+            cf = cookie_file_for(url)
+            if cf:
+                opts["cookiefile"] = cf
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+            items = self._build_items(info.get("formats", []) or [])
+            self._show_formats(items)
+        except Exception as e:
+            self.set_status(self._friendly_error(e), RED)
+
+    def _fmt_size(self, n):
+        if not n:
+            return "?"
+        for unit in ["B", "KB", "MB", "GB"]:
+            if n < 1024:
+                return "%.0f%s" % (n, unit)
+            n /= 1024.0
+        return "%.1fTB" % n
+
+    def _build_items(self, formats):
+        combined, audio, video = [], [], []
+        for f in formats:
+            fid = f.get("format_id")
+            if not fid:
+                continue
+            vc = f.get("vcodec")
+            ac = f.get("acodec")
+            has_v = bool(vc) and vc != "none"
+            has_a = bool(ac) and ac != "none"
+            ext = f.get("ext", "")
+            size = self._fmt_size(f.get("filesize") or f.get("filesize_approx"))
+            if has_v:
+                h = f.get("height")
+                q = ("%dp" % h) if h else (f.get("format_note") or "?")
+                key = h or 0
+            else:
+                abr = f.get("abr")
+                q = ("%dk" % int(abr)) if abr else (f.get("format_note") or "audio")
+                key = abr or 0
+            details = "%s %s %s" % (q, ext, size)
+            if has_v and has_a:
+                label = fa("صدادار") + " · " + details
+                combined.append((key, {"id": fid, "label": label}))
+            elif has_a and not has_v:
+                label = fa("فقط صدا") + " · " + details
+                audio.append((key, {"id": fid, "label": label}))
+            elif has_v and not has_a:
+                label = fa("بدون صدا") + " · " + details
+                video.append((key, {"id": fid, "label": label}))
+        combined.sort(key=lambda x: -x[0])
+        audio.sort(key=lambda x: -x[0])
+        video.sort(key=lambda x: -x[0])
+        return ([d for _, d in combined]
+                + [d for _, d in audio]
+                + [d for _, d in video])
+
+    @mainthread
+    def _show_formats(self, items):
+        self.set_status("", MUTED)
+        box = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(8))
+        if not items:
+            box.add_widget(Label(text=fa("فرمتی یافت نشد"), color=TEXT))
+        else:
+            scroll = ScrollView()
+            inner = BoxLayout(orientation="vertical", size_hint_y=None,
+                              spacing=dp(6), padding=[0, 0, 0, dp(4)])
+            inner.bind(minimum_height=inner.setter("height"))
+            for it in items:
+                b = Button(text=it["label"], size_hint_y=None, height=dp(50),
+                           background_normal="", background_down="",
+                           background_color=(0, 0, 0, 0),
+                           color=TEXT, halign="right", valign="middle",
+                           font_size="13sp", padding=[dp(12), dp(8)])
+                b.bind(size=lambda w, *_: setattr(
+                    w, "text_size", (w.width - dp(24), w.height)))
+                round_bg(b, SURFACE, 10)
+                b.bind(on_release=lambda _w, fid=it["id"]: self._pick_format(fid))
+                inner.add_widget(b)
+            scroll.add_widget(inner)
+            box.add_widget(scroll)
+
+        close = Button(text=fa("بستن"), size_hint_y=None, height=dp(46),
+                       background_normal="", background_color=(0, 0, 0, 0),
+                       color=DARKTX, bold=True)
+        round_bg(close, ACCENT, 12)
+        box.add_widget(close)
+
+        self._fmt_popup = Popup(title=fa("انتخاب فرمت"), content=box,
+                                size_hint=(0.95, 0.9),
+                                title_color=TEXT, separator_color=ACCENT)
+        close.bind(on_release=lambda *_: self._fmt_popup.dismiss())
+        self._fmt_popup.open()
+
+    def _pick_format(self, fid):
+        try:
+            if self._fmt_popup:
+                self._fmt_popup.dismiss()
+        except Exception:
+            pass
+        self._start(fid)
+
     # ---------- انتخاب گرافیکی پوشه ----------
     def open_folder_chooser(self, *_):
         box = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(8))
         start = self.path.text.strip() or default_dir()
         if not os.path.isdir(start):
             start = default_dir()
-
         chooser = FileChooserListView(path=start, dirselect=True,
                                       filters=[lambda folder, name: False])
-
         btns = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(8))
         pick = Button(text=fa("انتخاب این پوشه"), background_normal="",
                       background_color=(0, 0, 0, 0), color=DARKTX, bold=True)
@@ -357,13 +484,11 @@ class Downloader(App):
         round_bg(cancel, SURFACE, 12)
         btns.add_widget(pick)
         btns.add_widget(cancel)
-
         box.add_widget(chooser)
         box.add_widget(btns)
-
-        popup = Popup(title=fa("انتخاب پوشه ذخیره"),
-                      content=box, size_hint=(0.95, 0.9),
-                      title_color=TEXT, separator_color=ACCENT)
+        popup = Popup(title=fa("انتخاب پوشه ذخیره"), content=box,
+                      size_hint=(0.95, 0.9), title_color=TEXT,
+                      separator_color=ACCENT)
 
         def _do_pick(*_a):
             sel = chooser.selection
@@ -377,7 +502,7 @@ class Downloader(App):
         cancel.bind(on_release=lambda *_a: popup.dismiss())
         popup.open()
 
-    # ---------- سابقه دانلودها ----------
+    # ---------- سابقه ----------
     def _hist_path(self):
         return os.path.join(self.user_data_dir, "history.json")
 
@@ -400,7 +525,6 @@ class Downloader(App):
     def open_history(self, *_):
         box = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(8))
         items = self._load_history()
-
         if not items:
             box.add_widget(Label(text=fa("هنوز دانلودی ثبت نشده"), color=TEXT))
         else:
@@ -417,20 +541,18 @@ class Downloader(App):
                            color=TEXT if exists else MUTED,
                            halign="right", valign="middle", font_size="13sp",
                            padding=[dp(12), dp(8)])
-                b.bind(size=lambda w, *_: setattr(w, "text_size",
-                                                  (w.width - dp(24), w.height)))
+                b.bind(size=lambda w, *_: setattr(
+                    w, "text_size", (w.width - dp(24), w.height)))
                 round_bg(b, SURFACE, 10)
                 b.bind(on_release=lambda _w, p=it.get("path"): open_file(p))
                 inner.add_widget(b)
             scroll.add_widget(inner)
             box.add_widget(scroll)
-
         close = Button(text=fa("بستن"), size_hint_y=None, height=dp(48),
                        background_normal="", background_color=(0, 0, 0, 0),
                        color=DARKTX, bold=True)
         round_bg(close, ACCENT, 12)
         box.add_widget(close)
-
         popup = Popup(title=fa("سابقه دانلودها"), content=box,
                       size_hint=(0.95, 0.9),
                       title_color=TEXT, separator_color=ACCENT)
@@ -441,17 +563,19 @@ class Downloader(App):
         if not open_file(self._last_file):
             self.set_status(fa("باز کردن فایل ممکن نشد"), RED)
 
-    # ---------- منطق دانلود ----------
+    # ---------- دانلود ----------
     def on_download(self, *_):
         if self._downloading:
             self._cancel = True
             self.set_status(fa("در حال لغو..."), MUTED)
             return
+        self._start(QUALITY.get(self.quality.text, "best"))
+
+    def _start(self, fmt):
         url = self.url.text.strip()
         if not url:
             self.set_status(fa("لینک را وارد کنید"), RED)
             return
-        fmt = QUALITY.get(self.quality.text, "best")
         path = self.path.text.strip() or default_dir()
         self._downloading = True
         self._cancel = False
@@ -499,9 +623,10 @@ class Downloader(App):
         s = str(e)
         low = s.lower()
         if ("sign in to confirm" in low or "cookies" in low
-                or "login required" in low or "rate-limit" in low
-                or "private" in low and "cookie" in low):
+                or "login required" in low or "rate-limit" in low):
             return fa("نیاز به ورود. فایل کوکی را در پوشه Download بگذار.")
+        if "requested format" in low:
+            return fa("این فرمت موجود نیست. دکمه «دریافت فرمت‌ها» را بزن.")
         if len(s) > 160:
             s = s[:160] + "…"
         return fa("خطا: ") + s
@@ -518,7 +643,6 @@ class Downloader(App):
             self._last_file = d.get("filename")
             self._progress(100, fa("در حال نهایی‌سازی..."))
 
-    # ---------- به‌روزرسانی رابط (روی ریسه اصلی) ----------
     @mainthread
     def _progress(self, pct, text):
         self.progress.value = pct
