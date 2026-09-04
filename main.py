@@ -25,6 +25,9 @@ from kivy.graphics import Color, RoundedRectangle
 
 import yt_dlp
 
+# ---------- شماره نسخه برنامه ----------
+VERSION = "1.0"
+
 # ---------- شکل‌دهی صحیح متن فارسی ----------
 try:
     import arabic_reshaper
@@ -205,6 +208,9 @@ class Downloader(App):
         bar_wrap.add_widget(bar)
         bar_wrap.add_widget(Widget())
         root.add_widget(bar_wrap)
+
+        root.add_widget(Label(text="v" + VERSION, size_hint_y=None,
+                              height=dp(18), font_size="11sp", color=MUTED))
 
         root.add_widget(Widget(size_hint_y=None, height=dp(8)))
 
