@@ -207,11 +207,10 @@ class Downloader(App):
     def _input(self, text="", hint="", font_size="16sp"):
         ti = TextInput(text=text, hint_text=hint, multiline=False,
                        size_hint_y=None, height=dp(52),
-                       background_color=(0, 0, 0, 0),
-                       foreground_color=TEXT, cursor_color=ACCENT,
-                       hint_text_color=MUTED, font_size=font_size,
+                       background_color=SURFACE, foreground_color=TEXT,
+                       cursor_color=ACCENT, hint_text_color=MUTED,
+                       font_size=font_size,
                        padding=[dp(16), dp(15), dp(16), dp(15)])
-        ti.foreground_color = TEXT
         round_bg(ti, SURFACE, 14)
         return ti
 
