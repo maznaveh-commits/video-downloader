@@ -316,6 +316,7 @@ class Downloader(App):
         root.add_widget(hist_btn)
 
         scroll.add_widget(root)
+        self._read_shared_intent()
         return scroll
 
     # ---------- سازنده‌های ویجت ----------
@@ -668,6 +669,37 @@ class Downloader(App):
     def set_status(self, text, color=MUTED):
         self.status.text = text
         self.status.color = color
+
+    # ---------- دریافت لینک از منوی Share ----------
+    def on_resume(self):
+        self._read_shared_intent()
+        return True
+
+    def _extract_url(self, text):
+        import re
+        m = re.search(r"https?://\S+", text or "")
+        return m.group(0) if m else (text or "").strip()
+
+    def _read_shared_intent(self):
+        if not ANDROID:
+            return
+        try:
+            from jnius import autoclass
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            Intent = autoclass("android.content.Intent")
+            activity = PythonActivity.mActivity
+            intent = activity.getIntent()
+            if intent is None:
+                return
+            action = intent.getAction()
+            itype = intent.getType()
+            if action == Intent.ACTION_SEND and itype and itype.startswith("text"):
+                text = intent.getStringExtra(Intent.EXTRA_TEXT)
+                if text:
+                    self.url.text = self._extract_url(text)
+                    intent.setAction(Intent.ACTION_MAIN)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
