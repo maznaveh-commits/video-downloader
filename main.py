@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-دانلودگر ویدئو - نسخه Kivy (طرح تیره / سبز نئونی)
+دانلودگر ویدئو - نسخه Kivy (تم تیره / سبز نئونی)
 """
 import os
 import json
@@ -142,6 +142,24 @@ def default_dir():
     return os.path.expanduser("~")
 
 
+def cookie_file_for(url):
+    """اگر فایل کوکی مناسب در پوشه Download باشد، مسیرش را برمی‌گرداند."""
+    d = default_dir()
+    u = (url or "").lower()
+    if "instagram.com" in u:
+        names = ["instagram_cookies.txt", "cookies_instagram.txt"]
+    elif "youtu" in u:
+        names = ["youtube_cookies.txt", "cookies_youtube.txt"]
+    else:
+        names = []
+    names.append("cookies.txt")  # فایل عمومی به‌عنوان پشتیبان
+    for n in names:
+        p = os.path.join(d, n)
+        if os.path.isfile(p):
+            return p
+    return None
+
+
 def round_bg(widget, rgba, radius=14):
     with widget.canvas.before:
         widget._bgc = Color(*rgba)
@@ -261,11 +279,11 @@ class Downloader(App):
         self.progress = NeonProgress(size_hint_y=None, height=dp(8))
         root.add_widget(self.progress)
 
-        self.status = Label(text="", size_hint_y=None, height=dp(60),
-                            font_size="14sp", color=MUTED,
-                            halign="center", valign="top")
-        self.status.bind(size=lambda *_: setattr(self.status, "text_size",
-                                                 (self.status.width, None)))
+        self.status = Label(text="", size_hint_y=None, height=dp(84),
+                            font_size="13sp", color=MUTED,
+                            halign="center", valign="middle")
+        self.status.bind(size=lambda *_: setattr(
+            self.status, "text_size", (self.status.width, self.status.height)))
         root.add_widget(self.status)
 
         # ---- دکمه باز کردن فایل (بعد از تکمیل نمایان می‌شود) ----
@@ -463,6 +481,9 @@ class Downloader(App):
                 "no_warnings": True,
                 "noprogress": True,
             }
+            cf = cookie_file_for(url)
+            if cf:
+                opts["cookiefile"] = cf
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=True)
             title = str(info.get("title", ""))
@@ -471,7 +492,18 @@ class Downloader(App):
         except _Cancelled:
             self._finish(fa("دانلود لغو شد"), MUTED, None)
         except Exception as e:
-            self._finish(fa("خطا: ") + str(e), RED, None)
+            self._finish(self._friendly_error(e), RED, None)
+
+    def _friendly_error(self, e):
+        s = str(e)
+        low = s.lower()
+        if ("sign in to confirm" in low or "cookies" in low
+                or "login required" in low or "rate-limit" in low
+                or "private" in low and "cookie" in low):
+            return fa("نیاز به ورود. فایل کوکی را در پوشه Download بگذار.")
+        if len(s) > 160:
+            s = s[:160] + "…"
+        return fa("خطا: ") + s
 
     def _hook(self, d):
         if self._cancel:
