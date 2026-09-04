@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-دانلودگر ویدئو - نسخه Kivy برای ساخت APK
+دانلودگر ویدئو - نسخه Kivy (تم تیره / سبز نئونی)
 """
 import os
 import threading
@@ -11,10 +11,13 @@ from kivy.uix.label import Label
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
 from kivy.uix.spinner import Spinner
-from kivy.uix.progressbar import ProgressBar
+from kivy.uix.widget import Widget
 from kivy.clock import mainthread
 from kivy.core.text import LabelBase
+from kivy.core.window import Window
 from kivy.metrics import dp
+from kivy.properties import NumericProperty
+from kivy.graphics import Color, RoundedRectangle
 
 import yt_dlp
 
@@ -29,14 +32,11 @@ except Exception:
     def fa(t):
         return str(t)
 
-# ---------- ثبت فونت فارسی (در صورت وجود) ----------
-FONT = None
+# ---------- ثبت فونت فارسی به‌عنوان فونت پیش‌فرض ----------
 for _p in ("Vazirmatn-Regular.ttf", "Vazir.ttf"):
     if os.path.exists(_p):
-        # ثبت به‌عنوان فونت پیش‌فرض کل برنامه (Roboto) تا همه‌جا فارسی درست نمایش داده شود
         LabelBase.register(name="Roboto", fn_regular=_p)
         LabelBase.register(name="fa", fn_regular=_p)
-        FONT = "fa"
         break
 
 # ---------- امکانات اندروید ----------
@@ -47,7 +47,18 @@ try:
 except Exception:
     ANDROID = False
 
-# ---------- کیفیت‌ها (فرمت‌های تک‌فایل، بدون نیاز به ffmpeg) ----------
+# ---------- پالت رنگ (تیره / سبز نئونی) ----------
+BG       = (0.043, 0.055, 0.051, 1)   # پس‌زمینه
+SURFACE  = (0.094, 0.114, 0.106, 1)   # کادرها
+ACCENT   = (0.0,   0.902, 0.463, 1)   # سبز نئونی
+ACCENT_D = (0.0,   0.62,  0.33,  1)   # سبز تیره‌تر (حالت فشرده)
+TEXT     = (0.906, 0.941, 0.925, 1)   # متن اصلی
+MUTED    = (0.48,  0.545, 0.51,  1)   # متن کم‌رنگ
+DARKTX   = (0.04,  0.06,  0.05,  1)   # متن روی دکمه نئونی
+RED      = (1.0,   0.42,  0.42,  1)
+TRACK    = (0.16,  0.19,  0.17,  1)   # زمینه نوار پیشرفت
+
+# ---------- کیفیت‌ها (تک‌فایل، بدون ffmpeg) ----------
 QUALITY = {
     fa("بهترین (تک‌فایل)"): "best[ext=mp4]/best",
     fa("۷۲۰p"): "best[height<=720][ext=mp4]/best[height<=720]",
@@ -66,9 +77,45 @@ def default_dir():
     return os.path.expanduser("~")
 
 
+def round_bg(widget, rgba, radius=14):
+    """پس‌زمینه گردگوشه برای هر ویجت."""
+    with widget.canvas.before:
+        widget._bgc = Color(*rgba)
+        widget._bgr = RoundedRectangle(radius=[radius], pos=widget.pos, size=widget.size)
+
+    def _upd(*_a):
+        widget._bgr.pos = widget.pos
+        widget._bgr.size = widget.size
+    widget.bind(pos=_upd, size=_upd)
+
+
+class NeonProgress(Widget):
+    """نوار پیشرفت نئونی سفارشی (۰ تا ۱۰۰)."""
+    value = NumericProperty(0)
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        with self.canvas:
+            Color(*TRACK)
+            self._track = RoundedRectangle(radius=[6])
+            Color(*ACCENT)
+            self._fill = RoundedRectangle(radius=[6])
+        self.bind(pos=self._redraw, size=self._redraw, value=self._redraw)
+
+    def _redraw(self, *_a):
+        self._track.pos = self.pos
+        self._track.size = self.size
+        self._fill.pos = self.pos
+        w = self.width * max(0, min(self.value, 100)) / 100.0
+        self._fill.size = (w, self.height)
+
+
 class Downloader(App):
     def build(self):
         self.title = "Video Downloader"
+        Window.clearcolor = BG
+        Window.softinput_mode = "below_target"
+
         if ANDROID:
             try:
                 request_permissions([
@@ -78,68 +125,114 @@ class Downloader(App):
             except Exception:
                 pass
 
-        fk = {"font_name": FONT} if FONT else {}
-        self._fk = fk
+        root = BoxLayout(orientation="vertical",
+                         padding=[dp(22), dp(30), dp(22), dp(22)],
+                         spacing=dp(14))
 
-        root = BoxLayout(orientation="vertical", padding=dp(16), spacing=dp(8))
+        # ---- عنوان ----
+        root.add_widget(Label(text=fa("دانلود ویدئو"),
+                              size_hint_y=None, height=dp(46),
+                              font_size="26sp", bold=True, color=TEXT))
 
-        root.add_widget(Label(text=fa("⬇️ دانلود ویدئو"),
-                              size_hint_y=None, height=dp(44),
-                              font_size="22sp", **fk))
+        # ---- خط نئونی زیر عنوان (نشان برنامه) ----
+        bar_wrap = BoxLayout(size_hint_y=None, height=dp(4))
+        spacer_l = Widget()
+        spacer_r = Widget()
+        bar = Widget(size_hint_x=None, width=dp(64))
+        round_bg(bar, ACCENT, radius=2)
+        bar_wrap.add_widget(spacer_l)
+        bar_wrap.add_widget(bar)
+        bar_wrap.add_widget(spacer_r)
+        root.add_widget(bar_wrap)
 
-        root.add_widget(self._lbl(fa("لینک ویدئو:")))
-        self.url = TextInput(multiline=False, size_hint_y=None, height=dp(46),
-                             font_size="15sp")
+        root.add_widget(Widget(size_hint_y=None, height=dp(10)))
+
+        # ---- لینک ویدئو ----
+        root.add_widget(self._label(fa("لینک ویدئو")))
+        self.url = self._input(hint=fa("لینک را اینجا بچسبانید"))
         root.add_widget(self.url)
 
-        root.add_widget(self._lbl(fa("کیفیت:")))
-        self.quality = Spinner(text=list(QUALITY.keys())[0],
-                               values=list(QUALITY.keys()),
-                               size_hint_y=None, height=dp(46), **fk)
+        # ---- کیفیت ----
+        root.add_widget(self._label(fa("کیفیت")))
+        self.quality = Spinner(
+            text=list(QUALITY.keys())[0],
+            values=list(QUALITY.keys()),
+            size_hint_y=None, height=dp(52),
+            background_normal="", background_color=(0, 0, 0, 0),
+            color=TEXT, font_size="16sp")
+        round_bg(self.quality, SURFACE, 14)
         root.add_widget(self.quality)
 
-        root.add_widget(self._lbl(fa("محل ذخیره:")))
-        self.path = TextInput(text=default_dir(), multiline=False,
-                              size_hint_y=None, height=dp(46), font_size="13sp")
+        # ---- محل ذخیره ----
+        root.add_widget(self._label(fa("محل ذخیره")))
+        self.path = self._input(text=default_dir(), font_size="13sp")
         root.add_widget(self.path)
 
-        self.btn = Button(text=fa("دانلود"), size_hint_y=None, height=dp(52),
-                          font_size="17sp", **fk)
+        root.add_widget(Widget(size_hint_y=None, height=dp(6)))
+
+        # ---- دکمه دانلود (عنصر اصلی) ----
+        self.btn = Button(text=fa("دانلود"),
+                          size_hint_y=None, height=dp(56),
+                          background_normal="", background_down="",
+                          background_color=(0, 0, 0, 0),
+                          color=DARKTX, bold=True, font_size="18sp")
+        round_bg(self.btn, ACCENT, 16)
         self.btn.bind(on_release=self.on_download)
+        self.btn.bind(state=self._btn_state)
         root.add_widget(self.btn)
 
-        self.progress = ProgressBar(max=100, value=0,
-                                    size_hint_y=None, height=dp(18))
+        # ---- نوار پیشرفت ----
+        self.progress = NeonProgress(size_hint_y=None, height=dp(8))
         root.add_widget(self.progress)
 
-        self.status = Label(text="", size_hint_y=None, height=dp(70),
-                            font_size="14sp", halign="center", valign="top", **fk)
+        # ---- وضعیت ----
+        self.status = Label(text="", size_hint_y=None, height=dp(80),
+                            font_size="14sp", color=MUTED,
+                            halign="center", valign="top")
         self.status.bind(size=lambda *_: setattr(self.status, "text_size",
-                                                 self.status.size))
+                                                 (self.status.width, None)))
         root.add_widget(self.status)
 
-        root.add_widget(Label())  # فضای خالی پایین
+        root.add_widget(Widget())  # فضای خالی پایین
         return root
 
-    def _lbl(self, text):
-        return Label(text=text, size_hint_y=None, height=dp(24),
-                     halign="right", font_size="13sp", **self._fk)
+    # ---------- سازنده‌های ویجت ----------
+    def _label(self, text):
+        lbl = Label(text=text, size_hint_y=None, height=dp(22),
+                    color=MUTED, font_size="13sp",
+                    halign="right", valign="middle")
+        lbl.bind(size=lambda *_: setattr(lbl, "text_size", (lbl.width, lbl.height)))
+        return lbl
 
+    def _input(self, text="", hint="", font_size="16sp"):
+        ti = TextInput(text=text, hint_text=hint, multiline=False,
+                       size_hint_y=None, height=dp(52),
+                       background_normal="", background_active="",
+                       background_color=(0, 0, 0, 0),
+                       foreground_color=TEXT, cursor_color=ACCENT,
+                       hint_text_color=MUTED, font_size=font_size,
+                       padding=[dp(16), dp(15), dp(16), dp(15)])
+        round_bg(ti, SURFACE, 14)
+        return ti
+
+    def _btn_state(self, btn, state):
+        btn._bgc.rgba = ACCENT_D if state == "down" else ACCENT
+
+    # ---------- منطق دانلود ----------
     def on_download(self, *_):
         url = self.url.text.strip()
         if not url:
-            self.set_status(fa("لینک را وارد کنید"))
+            self.set_status(fa("لینک را وارد کنید"), RED)
             return
         fmt = QUALITY.get(self.quality.text, "best")
         path = self.path.text.strip() or default_dir()
         self.btn.disabled = True
         self.progress.value = 0
-        self.set_status(fa("در حال شروع..."))
+        self.set_status(fa("در حال شروع..."), MUTED)
         threading.Thread(target=self._run, args=(url, fmt, path),
                          daemon=True).start()
 
     def _run(self, url, fmt, path):
-        # logger ساده تا yt-dlp سراغ کنسول (که در اندروید وجود ندارد) نرود
         class _Logger:
             def debug(self, m): pass
             def info(self, m): pass
@@ -160,9 +253,9 @@ class Downloader(App):
             }
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=True)
-            self._done(fa("✅ کامل شد: ") + str(info.get("title", "")))
+            self._done(fa("کامل شد: ") + str(info.get("title", "")), ACCENT)
         except Exception as e:
-            self._done(fa("خطا: ") + str(e))
+            self._done(fa("خطا: ") + str(e), RED)
 
     def _hook(self, d):
         if d["status"] == "downloading":
@@ -177,15 +270,18 @@ class Downloader(App):
     def _progress(self, pct, text):
         self.progress.value = pct
         self.status.text = text
+        self.status.color = TEXT
 
     @mainthread
-    def _done(self, text):
+    def _done(self, text, color):
         self.status.text = text
+        self.status.color = color
         self.btn.disabled = False
 
     @mainthread
-    def set_status(self, text):
+    def set_status(self, text, color=MUTED):
         self.status.text = text
+        self.status.color = color
 
 
 if __name__ == "__main__":
