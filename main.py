@@ -124,12 +124,13 @@ INPUTBG  = (0.93,  0.95,  0.94,  1)
 INPUTTX  = (0.06,  0.08,  0.07,  1)
 
 # ---------- کیفیت‌ها ----------
+# هر گزینه چند حالت پشتیبان دارد تا اگر فرمت دقیق نبود، نزدیک‌ترین گزینه گرفته شود
 QUALITY = {
-    fa("بهترین (تک‌فایل)"): "best[ext=mp4]/best",
-    fa("۷۲۰p"): "best[height<=720][ext=mp4]/best[height<=720]",
-    fa("۴۸۰p"): "best[height<=480][ext=mp4]/best[height<=480]",
-    fa("۳۶۰p"): "best[height<=360][ext=mp4]/best[height<=360]",
-    fa("فقط صدا (m4a)"): "bestaudio[ext=m4a]/bestaudio",
+    fa("بهترین (تک‌فایل)"): "best[ext=mp4]/best[vcodec!=none][acodec!=none]/best",
+    fa("۷۲۰p"): "best[height<=720][ext=mp4]/best[height<=720]/best",
+    fa("۴۸۰p"): "best[height<=480][ext=mp4]/best[height<=480]/best",
+    fa("۳۶۰p"): "best[height<=360][ext=mp4]/best[height<=360]/best",
+    fa("فقط صدا"): "bestaudio/best",
 }
 
 
