@@ -33,6 +33,9 @@ android.allow_backup = 1
 # خروجی حالت release را APK کن (نه AAB)
 android.release_artifact = apk
 
+# ظاهر شدن در منوی Share اپلیکیشن‌ها برای دریافت لینک
+android.manifest.intent_filters = intent-filters.xml
+
 
 [buildozer]
 log_level = 2
