@@ -12,6 +12,8 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
 from kivy.uix.spinner import Spinner
 from kivy.uix.widget import Widget
+from kivy.uix.popup import Popup
+from kivy.uix.filechooser import FileChooserListView
 from kivy.clock import mainthread
 from kivy.core.text import LabelBase
 from kivy.core.window import Window
@@ -48,17 +50,19 @@ except Exception:
     ANDROID = False
 
 # ---------- پالت رنگ (تیره / سبز نئونی) ----------
-BG       = (0.043, 0.055, 0.051, 1)   # پس‌زمینه
-SURFACE  = (0.094, 0.114, 0.106, 1)   # کادرها
-ACCENT   = (0.0,   0.902, 0.463, 1)   # سبز نئونی
-ACCENT_D = (0.0,   0.62,  0.33,  1)   # سبز تیره‌تر (حالت فشرده)
-TEXT     = (0.906, 0.941, 0.925, 1)   # متن اصلی
-MUTED    = (0.48,  0.545, 0.51,  1)   # متن کم‌رنگ
-DARKTX   = (0.04,  0.06,  0.05,  1)   # متن روی دکمه نئونی
+BG       = (0.043, 0.055, 0.051, 1)
+SURFACE  = (0.094, 0.114, 0.106, 1)
+ACCENT   = (0.0,   0.902, 0.463, 1)
+ACCENT_D = (0.0,   0.62,  0.33,  1)
+TEXT     = (0.906, 0.941, 0.925, 1)
+MUTED    = (0.48,  0.545, 0.51,  1)
+DARKTX   = (0.04,  0.06,  0.05,  1)
 RED      = (1.0,   0.42,  0.42,  1)
-TRACK    = (0.16,  0.19,  0.17,  1)   # زمینه نوار پیشرفت
+TRACK    = (0.16,  0.19,  0.17,  1)
+INPUTBG  = (0.93,  0.95,  0.94,  1)   # زمینه روشن کادر ورودی (برای خوانایی قطعی)
+INPUTTX  = (0.06,  0.08,  0.07,  1)   # متن تیره روی زمینه روشن
 
-# ---------- کیفیت‌ها (تک‌فایل، بدون ffmpeg) ----------
+# ---------- کیفیت‌ها ----------
 QUALITY = {
     fa("بهترین (تک‌فایل)"): "best[ext=mp4]/best",
     fa("۷۲۰p"): "best[height<=720][ext=mp4]/best[height<=720]",
@@ -78,7 +82,6 @@ def default_dir():
 
 
 def round_bg(widget, rgba, radius=14):
-    """پس‌زمینه گردگوشه برای هر ویجت."""
     with widget.canvas.before:
         widget._bgc = Color(*rgba)
         widget._bgr = RoundedRectangle(radius=[radius], pos=widget.pos, size=widget.size)
@@ -90,7 +93,6 @@ def round_bg(widget, rgba, radius=14):
 
 
 class NeonProgress(Widget):
-    """نوار پیشرفت نئونی سفارشی (۰ تا ۱۰۰)."""
     value = NumericProperty(0)
 
     def __init__(self, **kw):
@@ -127,30 +129,35 @@ class Downloader(App):
 
         root = BoxLayout(orientation="vertical",
                          padding=[dp(22), dp(30), dp(22), dp(22)],
-                         spacing=dp(14))
+                         spacing=dp(12))
 
-        # ---- عنوان ----
         root.add_widget(Label(text=fa("دانلود ویدئو"),
                               size_hint_y=None, height=dp(46),
                               font_size="26sp", bold=True, color=TEXT))
 
-        # ---- خط نئونی زیر عنوان (نشان برنامه) ----
         bar_wrap = BoxLayout(size_hint_y=None, height=dp(4))
-        spacer_l = Widget()
-        spacer_r = Widget()
         bar = Widget(size_hint_x=None, width=dp(64))
         round_bg(bar, ACCENT, radius=2)
-        bar_wrap.add_widget(spacer_l)
+        bar_wrap.add_widget(Widget())
         bar_wrap.add_widget(bar)
-        bar_wrap.add_widget(spacer_r)
+        bar_wrap.add_widget(Widget())
         root.add_widget(bar_wrap)
 
         root.add_widget(Widget(size_hint_y=None, height=dp(10)))
 
-        # ---- لینک ویدئو ----
+        # ---- لینک ویدئو + دکمه پاک‌کردن ----
         root.add_widget(self._label(fa("لینک ویدئو")))
+        url_row = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(8))
         self.url = self._input(hint=fa("لینک را اینجا بچسبانید"))
-        root.add_widget(self.url)
+        clear_btn = Button(text="✕", size_hint_x=None, width=dp(52),
+                           background_normal="", background_down="",
+                           background_color=(0, 0, 0, 0),
+                           color=TEXT, font_size="20sp")
+        round_bg(clear_btn, SURFACE, 14)
+        clear_btn.bind(on_release=lambda *_: setattr(self.url, "text", ""))
+        url_row.add_widget(self.url)
+        url_row.add_widget(clear_btn)
+        root.add_widget(url_row)
 
         # ---- کیفیت ----
         root.add_widget(self._label(fa("کیفیت")))
@@ -163,14 +170,23 @@ class Downloader(App):
         round_bg(self.quality, SURFACE, 14)
         root.add_widget(self.quality)
 
-        # ---- محل ذخیره ----
+        # ---- محل ذخیره + دکمه انتخاب پوشه ----
         root.add_widget(self._label(fa("محل ذخیره")))
+        path_row = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(8))
         self.path = self._input(text=default_dir(), font_size="13sp")
-        root.add_widget(self.path)
+        browse_btn = Button(text=fa("انتخاب"), size_hint_x=None, width=dp(90),
+                            background_normal="", background_down="",
+                            background_color=(0, 0, 0, 0),
+                            color=ACCENT, bold=True, font_size="14sp")
+        round_bg(browse_btn, SURFACE, 14)
+        browse_btn.bind(on_release=self.open_folder_chooser)
+        path_row.add_widget(self.path)
+        path_row.add_widget(browse_btn)
+        root.add_widget(path_row)
 
         root.add_widget(Widget(size_hint_y=None, height=dp(6)))
 
-        # ---- دکمه دانلود (عنصر اصلی) ----
+        # ---- دکمه دانلود ----
         self.btn = Button(text=fa("دانلود"),
                           size_hint_y=None, height=dp(56),
                           background_normal="", background_down="",
@@ -181,11 +197,9 @@ class Downloader(App):
         self.btn.bind(state=self._btn_state)
         root.add_widget(self.btn)
 
-        # ---- نوار پیشرفت ----
         self.progress = NeonProgress(size_hint_y=None, height=dp(8))
         root.add_widget(self.progress)
 
-        # ---- وضعیت ----
         self.status = Label(text="", size_hint_y=None, height=dp(80),
                             font_size="14sp", color=MUTED,
                             halign="center", valign="top")
@@ -193,7 +207,7 @@ class Downloader(App):
                                                  (self.status.width, None)))
         root.add_widget(self.status)
 
-        root.add_widget(Widget())  # فضای خالی پایین
+        root.add_widget(Widget())
         return root
 
     # ---------- سازنده‌های ویجت ----------
@@ -205,17 +219,57 @@ class Downloader(App):
         return lbl
 
     def _input(self, text="", hint="", font_size="16sp"):
+        # زمینه روشن + متن تیره تا خوانایی قطعی باشد
         ti = TextInput(text=text, hint_text=hint, multiline=False,
                        size_hint_y=None, height=dp(52),
-                       background_color=SURFACE, foreground_color=TEXT,
-                       cursor_color=ACCENT, hint_text_color=MUTED,
+                       background_color=INPUTBG, foreground_color=INPUTTX,
+                       cursor_color=ACCENT_D, hint_text_color=MUTED,
                        font_size=font_size,
                        padding=[dp(16), dp(15), dp(16), dp(15)])
-        round_bg(ti, SURFACE, 14)
         return ti
 
     def _btn_state(self, btn, state):
         btn._bgc.rgba = ACCENT_D if state == "down" else ACCENT
+
+    # ---------- انتخاب گرافیکی پوشه ----------
+    def open_folder_chooser(self, *_):
+        box = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(8))
+        start = self.path.text.strip() or default_dir()
+        if not os.path.isdir(start):
+            start = default_dir()
+
+        chooser = FileChooserListView(path=start, dirselect=True,
+                                      filters=[lambda folder, name: False])
+        # filters بالا فایل‌ها را پنهان می‌کند و فقط پوشه‌ها نمایش داده می‌شوند
+
+        btns = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(8))
+        pick = Button(text=fa("انتخاب این پوشه"), background_normal="",
+                      background_color=(0, 0, 0, 0), color=DARKTX, bold=True)
+        round_bg(pick, ACCENT, 12)
+        cancel = Button(text=fa("انصراف"), background_normal="",
+                        background_color=(0, 0, 0, 0), color=TEXT)
+        round_bg(cancel, SURFACE, 12)
+        btns.add_widget(pick)
+        btns.add_widget(cancel)
+
+        box.add_widget(chooser)
+        box.add_widget(btns)
+
+        popup = Popup(title=fa("انتخاب پوشه ذخیره"),
+                      content=box, size_hint=(0.95, 0.9),
+                      title_color=TEXT, separator_color=ACCENT)
+
+        def _do_pick(*_a):
+            sel = chooser.selection
+            chosen = sel[0] if sel else chooser.path
+            if chosen and os.path.isfile(chosen):
+                chosen = os.path.dirname(chosen)
+            self.path.text = chosen or start
+            popup.dismiss()
+
+        pick.bind(on_release=_do_pick)
+        cancel.bind(on_release=lambda *_a: popup.dismiss())
+        popup.open()
 
     # ---------- منطق دانلود ----------
     def on_download(self, *_):
