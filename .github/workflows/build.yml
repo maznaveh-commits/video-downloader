@@ -32,14 +32,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install buildozer==1.5.0 python-for-android==2024.1.21 cython==0.29.36
 
-      # کش کردن SDK/NDK اندروید (سنگین‌ترین و ثابت‌ترین بخش)
+      # ساخت فایل keystore از روی Secret
+      - name: Decode keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "${{ github.workspace }}/release.keystore"
+
       - name: Cache Android SDK/NDK
         uses: actions/cache@v4
         with:
           path: ~/.buildozer/android/platform
           key: sdk-ndk-v1
 
-      # کش کردن ساخته‌های p4a؛ به buildozer.spec گره خورده تا با تغییر وابستگی‌ها تازه شود
       - name: Cache p4a build
         uses: actions/cache@v4
         with:
@@ -48,11 +50,16 @@ jobs:
           restore-keys: |
             p4a-
 
-      - name: Build APK
+      - name: Build signed APK
+        env:
+          P4A_RELEASE_KEYSTORE: ${{ github.workspace }}/release.keystore
+          P4A_RELEASE_KEYSTORE_PASSWD: ${{ secrets.KEYSTORE_PASSWORD }}
+          P4A_RELEASE_KEYALIAS: ${{ secrets.KEY_ALIAS }}
+          P4A_RELEASE_KEYALIAS_PASSWD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
           export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
           set +e
-          yes | buildozer -v android debug 2>&1 | tee build.log
+          yes | buildozer -v android release 2>&1 | tee build.log
           code=${PIPESTATUS[1]}
           set -e
           exit $code
@@ -78,3 +85,8 @@ jobs:
         with:
           name: apk
           path: bin/*.apk
+
+      # پاک کردن keystore از فضای کار
+      - name: Clean up keystore
+        if: always()
+        run: rm -f "${{ github.workspace }}/release.keystore"
