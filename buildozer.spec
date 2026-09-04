@@ -30,6 +30,9 @@ android.minapi = 24
 android.archs = arm64-v8a
 android.allow_backup = 1
 
+# خروجی حالت release را APK کن (نه AAB)
+android.release_artifact = apk
+
 
 [buildozer]
 log_level = 2
