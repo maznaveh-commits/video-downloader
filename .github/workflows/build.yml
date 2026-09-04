@@ -32,6 +32,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install buildozer==1.5.0 python-for-android==2024.1.21 cython==0.29.36
 
+      # کش کردن SDK/NDK اندروید (سنگین‌ترین و ثابت‌ترین بخش)
+      - name: Cache Android SDK/NDK
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer/android/platform
+          key: sdk-ndk-v1
+
+      # کش کردن ساخته‌های p4a؛ به buildozer.spec گره خورده تا با تغییر وابستگی‌ها تازه شود
+      - name: Cache p4a build
+        uses: actions/cache@v4
+        with:
+          path: .buildozer
+          key: p4a-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            p4a-
+
       - name: Build APK
         run: |
           export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
